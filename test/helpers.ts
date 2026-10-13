@@ -14,15 +14,26 @@ export interface AgentSpan {
   metrics: Record<string, number>
 }
 
-/** Minimal fake Datadog agent that decodes v0.4 / v0.5 trace payloads. */
+/** A profile upload: its multipart form, with event.json and the pprof files. */
+export interface AgentProfile {
+  headers: Record<string, string | string[] | undefined>
+  form: FormData
+}
+
+/** Minimal fake Datadog agent that decodes v0.4 / v0.5 trace payloads and keeps profile uploads. */
 export async function startFakeAgent () {
   const spans: AgentSpan[] = []
+  const profiles: AgentProfile[] = []
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = []
     req.on('data', (chunk) => chunks.push(chunk))
     req.on('end', () => {
       const body = Buffer.concat(chunks)
       if (req.url?.includes('/traces') && body.length) spans.push(...decodeTraces(req.url, body))
+      if (req.url === '/profiling/v1/input') {
+        void new Response(body, { headers: { 'content-type': req.headers['content-type']! } }).formData()
+          .then((form) => profiles.push({ headers: req.headers, form }))
+      }
       res.writeHead(req.url?.includes('/info') ? 404 : 200, { 'content-type': 'application/json' })
       res.end('{}')
     })
@@ -31,6 +42,7 @@ export async function startFakeAgent () {
   return {
     port: (server.address() as { port: number }).port,
     spans,
+    profiles,
     async waitFor (predicate: (spans: AgentSpan[]) => boolean, ms = 5000) {
       const deadline = Date.now() + ms
       while (Date.now() < deadline) {

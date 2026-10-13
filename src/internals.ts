@@ -7,6 +7,7 @@
 // change to any of this shows up as a failing build.
 import dc from 'node:diagnostics_channel'
 import { createRequire } from 'node:module'
+import os from 'node:os'
 import type { Span } from 'dd-trace'
 
 export const requestStart = dc.channel('apm:http:server:request:start')
@@ -32,4 +33,29 @@ function loadWebUtil (): WebUtil | undefined {
   } catch {
     return undefined
   }
+}
+
+/** The parts of dd-trace's resolved configuration the profiler needs. */
+export interface TracerConfig {
+  /** The agent URL. */
+  url: string
+  /** Global tags: service, env, version, runtime-id and DD_TAGS. */
+  tags: Record<string, string | undefined>
+  /** dd-trace's version. */
+  version: string
+}
+
+/** Undefined before `tracer.init()`, or when the installed dd-trace keeps its config elsewhere. */
+export function tracerConfig (tracer: object): TracerConfig | undefined {
+  const config = (tracer as { _tracer?: { _config?: { url?: unknown; tags?: unknown; reportHostname?: unknown } } })._tracer?._config
+  if (!config?.url || typeof config.tags !== 'object' || !config.tags) return undefined
+  const { version } = createRequire(import.meta.url)('dd-trace/package.json') as { version: string }
+  const tags: Record<string, string | undefined> = { ...config.tags as Record<string, string> }
+  if (config.reportHostname) tags.host = os.hostname()
+  // what dd-trace's profiler adds for source code integration, when set in the environment
+  if (process.env.DD_GIT_REPOSITORY_URL && process.env.DD_GIT_COMMIT_SHA) {
+    tags['git.repository_url'] = process.env.DD_GIT_REPOSITORY_URL
+    tags['git.commit.sha'] = process.env.DD_GIT_COMMIT_SHA
+  }
+  return { url: String(config.url), tags, version }
 }
