@@ -1,0 +1,30 @@
+{
+  "name": "dd-trace-bun",
+  "version": "0.1.0",
+  "description": "Bun-native server tracing for dd-trace: instruments Bun.serve (and Elysia/Hono on top of it) so distributed traces connect.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./init": "./src/init.ts",
+    "./elysia": "./src/elysia.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "dd-trace": ">=5",
+    "elysia": ">=1.2"
+  },
+  "peerDependenciesMeta": {
+    "elysia": { "optional": true }
+  },
+  "devDependencies": {
+    "@msgpack/msgpack": "^3.0.0",
+    "@types/bun": "latest",
+    "dd-trace": "^6.20.1",
+    "elysia": "^1.4.30",
+    "typescript": "^5.6.0"
+  }
+}
