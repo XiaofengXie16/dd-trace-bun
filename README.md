@@ -117,7 +117,7 @@ bun run typecheck
 bun run build     # compiles src/ to dist/, which is what the npm package exports
 ```
 
-Releases are managed with [Changesets](https://github.com/changesets/changesets). A pull request that should ship a release adds a changeset with `bunx changeset`, which asks for the bump (patch, minor or major) and a line for the changelog. Once that's merged, CI opens or updates a "Version Packages" pull request that bumps `version` and CHANGELOG.md, and merging that one publishes to npm with provenance, tags the release and creates a GitHub release. Publishing needs an `NPM_TOKEN` repository secret, or npm trusted publishing set up for this repository.
+Releases are managed with [Changesets](https://github.com/changesets/changesets). A pull request that should ship a release adds a changeset with `bunx changeset`, which asks for the bump (patch, minor or major) and a line for the changelog. Once that's merged, CI opens or updates a "Version Packages" pull request that bumps `version` and CHANGELOG.md, and merging that one publishes to npm with provenance, tags the release and creates a GitHub release. npm trusts this repository's `ci.yml` workflow to publish ([trusted publishing](https://docs.npmjs.com/trusted-publishers)), so no npm token is involved.
 
 ## License
 
