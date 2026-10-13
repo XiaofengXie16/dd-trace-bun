@@ -10,7 +10,8 @@ const ports: { bun: number; elysia: number; node: number } = await (async () => 
 })()
 afterAll(() => { app.kill(); agent.close() })
 
-const serverSpans = (trace: string) => agent.spans.filter((s) => s.trace === trace && s.service === 'bun-svc' && s.name === 'web.request' && s.meta.component === 'bun')
+// server spans from the Bun.serve or Elysia app under test (not the fixture's downstream node:http echo server)
+const serverSpans = (trace: string) => agent.spans.filter((s) => s.trace === trace && s.name === 'web.request' && [ports.bun, ports.elysia].some((p) => s.meta['http.url']?.includes(`:${p}/`)))
 
 describe('Bun.serve', () => {
   const port = ports.bun

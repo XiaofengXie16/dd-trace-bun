@@ -1,22 +1,20 @@
 import { Elysia } from 'elysia'
-import tracer from 'dd-trace'
+import { nodeRequestOf, setRoute } from './serve'
+
+const web = require('dd-trace/packages/dd-trace/src/plugins/util/web')
 
 /**
- * Elysia plugin: names the active server span after the matched route
- * template (e.g. `GET /users/:id`) and records handler errors on it.
- * Works whether Elysia serves the request from Bun's native `routes`
- * or through its `fetch` fallback, as long as Bun.serve is patched
- * (`init()` from `dd-trace-bun`).
+ * Elysia plugin: tags the server span with the matched route template
+ * (`http.route`, resource `GET /users/:id`) and records handler errors.
+ * Needs Bun.serve to be patched (`init()` from `dd-trace-bun`).
  */
 export const datadog = () =>
   new Elysia({ name: 'dd-trace-bun' })
     .onBeforeHandle({ as: 'global' }, ({ request, route }) => {
-      const span = tracer.scope().active()
-      if (!span || !route) return
-      span.setTag('resource.name', `${request.method} ${route}`)
-      span.setTag('http.route', route)
+      if (route) setRoute(request, route)
     })
-    .onError({ as: 'global' }, ({ error }) => {
-      const span = tracer.scope().active()
+    .onError({ as: 'global' }, ({ request, error }) => {
+      const nreq = nodeRequestOf(request)
+      const span = nreq && web.root(nreq)
       if (span && error instanceof Error) span.setTag('error', error)
     })

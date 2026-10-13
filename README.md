@@ -37,23 +37,52 @@ import { datadog } from 'dd-trace-bun/elysia'
 new Elysia().use(datadog()).get('/users/:id', ...).listen(3000)
 ```
 
-### Options
+### Configuration
+
+Bun.serve requests go through **dd-trace's own `http` server plugin**, the same code that handles `node:http` on Node. Everything is therefore configured exactly as on Node, and behaves the same:
 
 ```ts
-init({
-  serve: {
-    filter: (req, url) => url.pathname !== '/healthz', // skip tracing some requests
-    isError: (status) => status >= 500,                // which statuses mark the span as an error
+tracer.use('http', {
+  server: {
+    blocklist: ['/healthz'],
+    validateStatus: (code) => code < 500,
+    hooks: { request: (span, req, res) => span.setTag('tenant', req.headers['x-tenant']) },
+    service: 'my-http-service',
   },
 })
 ```
 
-## What it does
+Env vars such as `DD_TRACE_HEADER_TAGS`, `DD_TRACE_HTTP_SERVER_ERROR_STATUSES`, `DD_TRACE_PROPAGATION_STYLE`, `DD_TRACE_SPAN_ATTRIBUTE_SCHEMA`, `DD_TRACE_OTEL_SEMANTICS_ENABLED`, `DD_TRACE_CLIENT_IP_ENABLED` and `DD_TRACE_RESOURCE_RENAMING_ENABLED` all apply. In hooks, `req` is a Node-style view of the Bun request (`method`, `url`, `headers`, `socket.remoteAddress`) with the original `Request` on `req.request`.
 
-- Patches `Bun.serve` (and `server.reload`) to wrap `fetch` and every function in `routes`.
-- Per request: extracts context with `tracer.extract('http_headers', …)` (Datadog, W3C tracecontext, B3, whatever dd-trace is configured for), starts a `web.request` span (`span.kind=server`, `component=bun`), and keeps it active for the whole handler, including across `await`s.
-- Tags `http.method`, `http.url`, `http.route`, `http.status_code`, `http.useragent`. Thrown errors and 5xx responses mark the span as an error.
-- Defaults `runtimeMetrics` and `profiling` to off under Bun, because their native addons crash or misbehave there. They can still be turned on with `DD_RUNTIME_METRICS_ENABLED` / `DD_PROFILING_ENABLED`.
+## Parity with dd-trace on Node
+
+`test/parity/http-server.test.ts` ports dd-trace-js's own `packages/datadog-plugin-http/test/server.spec.js`, plus propagation and web-util behaviour other dd-trace specs cover. It runs the **same assertions** against three targets:
+
+| Target | Runtime | Tracer | Result |
+|---|---|---|---|
+| `node:http` (reference) | Node 22 | plain dd-trace | 25 / 25 |
+| `Bun.serve` | Bun 1.4.2 | dd-trace-bun | 25 / 25 |
+| Elysia `.listen()` | Bun 1.4.2 | dd-trace-bun | 25 / 25 |
+
+The cases cover:
+- span shape: name, service, type, resource, `span.kind`, URL, method, status, component
+- the request scope
+- Datadog, W3C and B3 propagation
+- 5xx and thrown errors
+- query string obfuscation
+- CORS preflight trace headers
+- canceled requests
+- OTel semantics
+- `DD_TRACE_HTTP_SERVER_ERROR_STATUSES`
+- `server` config, hooks, blocklist and `service` override
+- resource renaming (`http.endpoint`)
+- header tags
+- client IP
+- naming schema v1
+
+Elysia's spans carry its matched route (`GET /*`), just as dd-trace's Express integration does, so its resource and endpoint assertions expect the route.
+
+Not ported yet: dd-trace's AppSec/IAST request blocking (it writes to a Node `ServerResponse`), HTTP/2, and the http *client* spec. Bun's `fetch` goes through dd-trace's own fetch plugin unchanged.
 
 ## Known limitations
 
@@ -65,7 +94,7 @@ init({
 
 ```sh
 bun install
-bun test        # fake Datadog agent + traced Bun.serve / Elysia / node:http app
+bun test        # 83 tests: parity suite (node / bun / elysia) + Bun-specific tests, against a fake Datadog agent
 bun run typecheck
 ```
 
