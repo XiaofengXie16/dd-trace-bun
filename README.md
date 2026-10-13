@@ -117,7 +117,7 @@ bun run typecheck
 bun run build     # compiles src/ to dist/, which is what the npm package exports
 ```
 
-To release, bump `version` in package.json and push a matching tag (`v0.2.0`). The publish workflow runs the tests and publishes to npm with provenance.
+Releases are managed with [Changesets](https://github.com/changesets/changesets). A pull request that should ship a release adds a changeset with `bunx changeset`, which asks for the bump (patch, minor or major) and a line for the changelog. Once that's merged, CI opens or updates a "Version Packages" pull request that bumps `version` and CHANGELOG.md, and merging that one publishes to npm with provenance, tags the release and creates a GitHub release. Publishing needs an `NPM_TOKEN` repository secret, or npm trusted publishing set up for this repository.
 
 ## License
 

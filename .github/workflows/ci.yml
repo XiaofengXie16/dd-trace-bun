@@ -1,0 +1,50 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # the newest release of each supported dd-trace major
+        dd-trace: ['5', '6']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v5 # runs the node:http reference app of the parity suite
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - run: bun add --dev dd-trace@${{ matrix.dd-trace }}
+      - run: bun run typecheck
+      - run: bun run build
+      - run: bun test
+
+  # On main, once the tests pass: while changesets are pending, open or update a "Version
+  # Packages" pull request that bumps the version and changelog; merging it publishes to npm.
+  release:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: release
+    permissions:
+      contents: write # version commits, tags and GitHub releases
+      pull-requests: write # the Version Packages pull request
+      id-token: write # npm provenance, and trusted publishing once it's set up on npmjs.com
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2 # npm publish builds dist/ with bun run build
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - uses: changesets/action@v2
+        with:
+          publish-script: bun run release
+        env:
+          # not needed once trusted publishing is configured for the package on npmjs.com
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

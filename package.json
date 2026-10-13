@@ -26,12 +26,16 @@
     }
   },
   "files": ["dist", "src"],
+  "publishConfig": {
+    "provenance": true
+  },
   "engines": {
     "bun": ">=1.2.23"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "prepack": "bun run build",
+    "release": "changeset publish",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
@@ -43,6 +47,7 @@
     "elysia": { "optional": true }
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@msgpack/msgpack": "^3.0.0",
     "@types/bun": "^1.4.3",
     "dd-trace": "^6.20.1",
