@@ -1,7 +1,7 @@
 // Node-style views of a Bun request and response: the parts of node:http's
 // IncomingMessage and ServerResponse that dd-trace's http server plugin and AppSec use.
 import type { Server } from 'bun'
-import { responseWriteHead } from './internals'
+import { responseWriteHead } from './internals.ts'
 
 /**
  * A Bun request as dd-trace sees it. This is also the `req` passed to

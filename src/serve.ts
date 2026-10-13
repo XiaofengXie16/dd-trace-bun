@@ -1,6 +1,6 @@
 import type { Server } from 'bun'
-import { requestExit, requestFinish, requestStart, web } from './internals'
-import { NodeResponse, toNodeRequest, type NodeRequest } from './node-http'
+import { requestExit, requestFinish, requestStart, web } from './internals.ts'
+import { NodeResponse, toNodeRequest, type NodeRequest } from './node-http.ts'
 
 type Handler = (request: Request, server: Server<any>) => unknown
 

@@ -1,0 +1,28 @@
+name: publish
+# Push a tag like v0.1.0 (matching package.json's version) to publish that commit to npm.
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  id-token: write # npm provenance, and trusted publishing once it's set up on npmjs.com
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install --global npm@^11.5.1 # trusted publishing needs 11.5.1+
+      - run: bun install --frozen-lockfile
+      - name: Check the tag matches package.json
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - run: bun run typecheck
+      - run: bun test
+      - run: npm publish --provenance --access public
+        env:
+          # not needed once trusted publishing is configured for the package on npmjs.com
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

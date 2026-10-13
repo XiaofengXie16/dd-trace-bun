@@ -15,7 +15,7 @@ dd-trace's HTTP server integration hooks Node's `http.Server`. `Bun.serve` is na
 ## Install
 
 ```sh
-bun add dd-trace github:XiaofengXie16/dd-trace-bun
+bun add dd-trace dd-trace-bun
 ```
 
 ## Usage
@@ -114,7 +114,10 @@ Bun ≥ 1.2.23, dd-trace ≥ 5.60 and < 7, and optionally Elysia ≥ 1.2. The wh
 bun install
 bun test          # 97 tests against a fake Datadog agent; node must be on PATH for the reference app
 bun run typecheck
+bun run build     # compiles src/ to dist/, which is what the npm package exports
 ```
+
+To release, bump `version` in package.json and push a matching tag (`v0.2.0`). The publish workflow runs the tests and publishes to npm with provenance.
 
 ## License
 

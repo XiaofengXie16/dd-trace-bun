@@ -2,8 +2,8 @@
 // `bun test` (it sees Bun's jest-compatible globals), so the traced apps live here.
 import http from 'node:http'
 import { Elysia, t } from 'elysia'
-import { init, traceHandler } from '../src/index'
-import { datadog } from '../src/elysia'
+import { init, traceHandler } from '../src/index.ts'
+import { datadog } from '../src/elysia.ts'
 
 const tracer = init({
   service: 'bun-svc',

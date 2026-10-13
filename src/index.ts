@@ -1,9 +1,9 @@
 import tracer from 'dd-trace'
 import type { TracerOptions } from 'dd-trace'
-import { web } from './internals'
-import { patchBunServe } from './serve'
+import { web } from './internals.ts'
+import { patchBunServe } from './serve.ts'
 
-export { recordError, setRoute, traceHandler } from './serve'
+export { recordError, setRoute, traceHandler } from './serve.ts'
 
 /**
  * Initialise dd-trace and instrument `Bun.serve`, and with it Elysia, Hono and anything

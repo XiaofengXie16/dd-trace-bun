@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "description": "Datadog APM for Bun servers: dd-trace tracing for Bun.serve, Elysia and Hono, so distributed traces connect.",
   "keywords": ["bun", "datadog", "dd-trace", "apm", "tracing", "elysia", "hono"],
+  "homepage": "https://github.com/XiaofengXie16/dd-trace-bun#readme",
+  "bugs": "https://github.com/XiaofengXie16/dd-trace-bun/issues",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -10,15 +12,26 @@
   },
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./init": "./src/init.ts",
-    "./elysia": "./src/elysia.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./init": {
+      "types": "./dist/init.d.ts",
+      "default": "./dist/init.js"
+    },
+    "./elysia": {
+      "types": "./dist/elysia.d.ts",
+      "default": "./dist/elysia.js"
+    }
   },
-  "files": ["src"],
+  "files": ["dist", "src"],
   "engines": {
     "bun": ">=1.2.23"
   },
   "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "bun run build",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
