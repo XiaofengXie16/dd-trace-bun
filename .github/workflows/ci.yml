@@ -33,18 +33,14 @@ jobs:
     permissions:
       contents: write # version commits, tags and GitHub releases
       pull-requests: write # the Version Packages pull request
-      id-token: write # npm provenance, and trusted publishing once it's set up on npmjs.com
+      id-token: write # npm trusted publishing (configured on npmjs.com for ci.yml) and provenance
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2 # npm publish builds dist/ with bun run build
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5 # npm 11.5.1+ for trusted publishing
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
       - run: bun install --frozen-lockfile
       - uses: changesets/action@v2
         with:
           publish-script: bun run release
-        env:
-          # not needed once trusted publishing is configured for the package on npmjs.com
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
