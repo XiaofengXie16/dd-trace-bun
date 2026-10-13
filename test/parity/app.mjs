@@ -18,6 +18,7 @@ if (TARGET === 'node') {
 const scenarios = {
   default: {},
   'server-empty': { client: false, server: {} },
+  'server-disabled': { client: false, server: false },
   hooks: {
     client: false,
     server: {

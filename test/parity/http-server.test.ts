@@ -3,36 +3,29 @@
 // targets: node:http on Node with plain dd-trace (the reference), Bun.serve and
 // Elysia on Bun with dd-trace-bun. Every assertion must hold for all three.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { startFakeAgent, rawGet, randomId, type AgentSpan } from '../helpers'
+import { rawGet, randomId, spawnApp, startFakeAgent, type AgentSpan } from '../helpers'
 
-const TARGETS = (process.env.TARGETS?.split(',') ?? ['node', 'bun', 'elysia']) as ('node' | 'bun' | 'elysia')[]
 type Target = 'node' | 'bun' | 'elysia'
+const TARGETS = (process.env.TARGETS?.split(',') ?? ['node', 'bun', 'elysia']) as Target[]
 
-async function startApp (target: Target, scenario = 'default', env: Record<string, string> = {}) {
+async function startApp (target: Target, scenario: string, env: Record<string, string>) {
   const agent = await startFakeAgent()
-  const proc = Bun.spawn([target === 'node' ? 'node' : 'bun', `${import.meta.dir}/app.mjs`], {
-    env: { ...process.env, ...env, TARGET: target, SCENARIO: scenario, AGENT_PORT: String(agent.port) },
-    stdout: 'pipe',
-    stderr: 'inherit',
+  const app = await spawnApp<{ port: number }>([target === 'node' ? 'node' : 'bun', `${import.meta.dir}/app.mjs`], {
+    ...env,
+    TARGET: target,
+    SCENARIO: scenario,
+    AGENT_PORT: String(agent.port),
   })
-  const reader = proc.stdout.getReader()
-  let buf = ''
-  while (!buf.includes('\n')) {
-    const { value, done } = await reader.read()
-    if (done) throw new Error(`${target} app exited before listening`)
-    buf += new TextDecoder().decode(value)
-  }
-  const { port } = JSON.parse(buf.split('\n').find((l) => l.startsWith('{'))!)
-  const serverSpan = (pred: (s: AgentSpan) => boolean = () => true) =>
-    agent.waitFor((spans) => spans.some((s) => s.meta['span.kind'] === 'server' && pred(s)))
-      .then((spans) => spans.find((s) => s.meta['span.kind'] === 'server' && pred(s))!)
+  const { port } = app.info
+  const isServerSpan = (pred: (s: AgentSpan) => unknown) => (s: AgentSpan) => s.meta['span.kind'] === 'server' && Boolean(pred(s))
   return {
     port,
     agent,
     get: (path: string, headers: Record<string, string> = {}, opts: Parameters<typeof rawGet>[3] = {}) =>
       rawGet(port, path, headers, { host: 'localhost', ...opts }),
-    serverSpan,
-    stop: () => { proc.kill(); agent.close() },
+    serverSpan: (pred: (s: AgentSpan) => unknown = () => true) =>
+      agent.waitFor((spans) => spans.some(isServerSpan(pred))).then((spans) => spans.find(isServerSpan(pred))!),
+    stop: () => { app.stop(); agent.close() },
   }
 }
 
@@ -277,6 +270,39 @@ for (const target of TARGETS) {
           const span = await app().serverSpan()
           expect(span.trace).toBe(trace.toString())
           expect(span.parent).toBe(parent.toString())
+        })
+      })
+    })
+
+    describe('with the server integration disabled', () => {
+      withApp(target, 'server-disabled', {}, (app) => {
+        test('should not trace requests', async () => {
+          expect((await app().get('/user')).status).toBe(200)
+          await Bun.sleep(200)
+          expect(app().agent.spans.some((s) => s.meta['span.kind'] === 'server')).toBe(false)
+        })
+      })
+    })
+
+    describe('with AppSec enabled', () => {
+      withApp(target, 'default', { DD_APPSEC_ENABLED: 'true' }, (app) => {
+        test('should block a request that matches a blocking rule', async () => {
+          const res = await app().get('/admin', { 'user-agent': 'dd-test-scanner-log-block' })
+          expect(res.status).toBe(403)
+          expect(JSON.parse(res.body).errors[0].title).toBe("You've been blocked")
+          expect(res.headers['x-custom-res']).toBeUndefined() // the handler didn't run
+          const span = await app().serverSpan((s) => s.meta['http.url']?.endsWith('/admin'))
+          expect(span.meta['appsec.blocked']).toBe('true')
+          expect(span.meta['http.status_code']).toBe('403')
+          expect(span.error).toBe(0)
+        })
+
+        test('should report an attack without blocking it', async () => {
+          const res = await app().get('/scan', { 'user-agent': 'Arachni/v1' })
+          expect(res.status).toBe(200)
+          const span = await app().serverSpan((s) => s.meta['http.url']?.endsWith('/scan'))
+          expect(span.meta['appsec.event']).toBe('true')
+          expect(span.meta['appsec.blocked']).toBeUndefined()
         })
       })
     })
