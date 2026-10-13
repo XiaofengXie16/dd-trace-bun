@@ -75,6 +75,18 @@ Environment variables such as `DD_TRACE_HEADER_TAGS`, `DD_TRACE_HTTP_SERVER_ERRO
 
 **AppSec** works too (`DD_APPSEC_ENABLED=true`): attacks are reported on the span, and requests that match a blocking rule get dd-trace's blocking response without reaching your handler.
 
+## CPU profiling
+
+Turn it on as with dd-trace, with `DD_PROFILING_ENABLED=true` or `init({ profiling: true })`. Profiles show up in Datadog's Continuous Profiler under your service, as CPU time and wall time per function, every 65 seconds (`DD_PROFILING_UPLOAD_PERIOD`).
+
+dd-trace's own profiler doesn't work under Bun: it samples through `@datadog/pprof`, a native addon built on V8's `CpuProfiler`, and Bun runs JavaScriptCore. Its wall profile comes back with no JavaScript samples, and with the default profilers its heap profiler throws ("Heap profiler is not enabled") before anything is uploaded. So under Bun, `init()` keeps dd-trace's profiler off and samples with Bun's own instead: the inspector's `Profiler` domain, which Bun implements on JavaScriptCore's sampling profiler. Each period's profile is converted to pprof in the shape of dd-trace's wall profile and uploaded to the agent's `/profiling/v1/input`, tagged like dd-trace's (service, env, version, runtime-id, `DD_TAGS`, git metadata from `DD_GIT_*`) plus `runtime_engine:bun`.
+
+What's different from dd-trace on Node:
+- JavaScriptCore only samples while JavaScript is running, so time spent waiting on I/O doesn't appear, and wall time equals CPU time.
+- Samples aren't linked to spans, so there are no code hotspots or endpoint breakdowns, and only the main thread is profiled.
+- There's no heap, allocation or event (timeline) profile.
+- The upload goes through Bun's `fetch`, without dd-trace's retries.
+
 ## Parity with dd-trace on Node
 
 `test/parity/http-server.test.ts` ports dd-trace-js's own `packages/datadog-plugin-http/test/server.spec.js`, plus propagation, AppSec and web-util behaviour other dd-trace specs cover. It runs the **same assertions** against three apps:
@@ -94,13 +106,14 @@ The cases cover span shape (name, service, type, resource, kind, URL, method, st
 - `init()` patches `Bun.serve` (and `server.reload`) to wrap `fetch` and every handler in `routes`.
 - Each request is published on the diagnostics channels dd-trace's `node:http` instrumentation uses, with a Node-style view of the request and response. dd-trace's http server plugin then extracts the incoming context, starts the span, applies its configuration, and finishes the span once the handler's `Response` is known. The span is active for the whole handler, across `await`s.
 - Handlers of Bun's native `routes` set `http.route`, so the resource becomes `GET /users/:id`.
-- What it needs from dd-trace beyond its public API (four channel names and `plugins/util/web`) is all in `src/internals.ts`. CI runs the suite against the newest dd-trace 5 and 6, so a dd-trace release that changes them shows up as a failing build. If they're missing at runtime, `init()` logs a warning and leaves `Bun.serve` alone instead of failing.
+- What it needs from dd-trace beyond its public API (four channel names, `plugins/util/web`, and the tracer's resolved config for profiling) is all in `src/internals.ts`. CI runs the suite against the newest dd-trace 5 and 6, so a dd-trace release that changes them shows up as a failing build. If they're missing at runtime, `init()` logs a warning and leaves `Bun.serve` alone instead of failing.
 
 ## Limitations
 
 - The span ends when the handler returns its `Response`, not when a streamed body finishes.
 - When a bare `Bun.serve` fetch handler throws, the span records the error with status 500. Bun doesn't pass the request to your `error()` handler, so a different status it returns isn't seen. Elysia and Hono handle errors themselves and aren't affected.
 - dd-trace's runtime metrics crash Bun ([oven-sh/bun#18546](https://github.com/oven-sh/bun/issues/18546)), so `init()` keeps them off even if `DD_RUNTIME_METRICS_ENABLED` is set, and logs that it did. Passing `runtimeMetrics` to `init()` overrides this.
+- dd-trace's profiler doesn't work under Bun. `init()` replaces it with a CPU profiler of its own, which has fewer features; see [CPU profiling](#cpu-profiling).
 - dd-trace's Orchestrion-based integrations (graphql, ai, bullmq, langchain, …) don't run under Bun ([dd-trace-js#3749](https://github.com/DataDog/dd-trace-js/issues/3749)). That's a gap in dd-trace itself, which this package doesn't address.
 - Inside `bun test`, dd-trace turns itself into a no-op because it sees Bun's jest-compatible globals. This package's own tests therefore run the traced apps as subprocesses.
 
@@ -112,7 +125,7 @@ Bun ≥ 1.2.23, dd-trace ≥ 5.60 and < 7, and optionally Elysia ≥ 1.2. The wh
 
 ```sh
 bun install
-bun test          # 97 tests against a fake Datadog agent; node must be on PATH for the reference app
+bun test          # 102 tests against a fake Datadog agent; node must be on PATH for the reference app
 bun run typecheck
 bun run build     # compiles src/ to dist/, which is what the npm package exports
 ```

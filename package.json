@@ -39,6 +39,9 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "pprof-format": "^2.1.0"
+  },
   "peerDependencies": {
     "dd-trace": ">=5.60.0 <7",
     "elysia": ">=1.2.0"

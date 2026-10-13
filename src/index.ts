@@ -1,6 +1,7 @@
 import tracer from 'dd-trace'
 import type { TracerOptions } from 'dd-trace'
-import { web } from './internals.ts'
+import { tracerConfig, web } from './internals.ts'
+import { BunProfiler } from './profiler.ts'
 import { patchBunServe } from './serve.ts'
 
 export { recordError, setRoute, traceHandler } from './serve.ts'
@@ -20,7 +21,10 @@ export function init (options: TracerOptions = {}): typeof tracer {
     console.warn('dd-trace-bun: ignoring DD_RUNTIME_METRICS_ENABLED, dd-trace\'s runtime metrics crash Bun ' +
       '(https://github.com/oven-sh/bun/issues/18546). Pass `runtimeMetrics` to init() to override.')
   }
-  tracer.init({ ...options, runtimeMetrics: options.runtimeMetrics ?? false })
+  // dd-trace's profiler samples through V8, which Bun doesn't have, so profile with Bun's own
+  const profiling = options.profiling ?? isTrue(process.env.DD_PROFILING_ENABLED)
+  tracer.init({ ...options, runtimeMetrics: options.runtimeMetrics ?? false, profiling: false })
+  if (profiling) startProfiler()
 
   if (!web) {
     console.warn('dd-trace-bun: the installed dd-trace version is not supported, Bun.serve requests will not be traced.')
@@ -30,6 +34,18 @@ export function init (options: TracerOptions = {}): typeof tracer {
   require('node:http')
   patchBunServe()
   return tracer
+}
+
+function startProfiler (): void {
+  const config = tracerConfig(tracer)
+  if (!config) {
+    console.warn('dd-trace-bun: the installed dd-trace version is not supported, CPU profiling is off.')
+    return
+  }
+  const uploadPeriod = Number(process.env.DD_PROFILING_UPLOAD_PERIOD) || 65
+  // dd-trace's sampling rate
+  new BunProfiler({ ...config, uploadPeriod: uploadPeriod * 1000, samplingInterval: Math.round(1e6 / 99) }).start()
+    .catch((error) => console.warn('dd-trace-bun: could not start CPU profiling:', error instanceof Error ? error.message : error))
 }
 
 function isTrue (value: string | undefined): boolean {
