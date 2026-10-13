@@ -1,12 +1,13 @@
-// An ordinary Elysia app: no tracing code. Run with
-//   DD_SERVICE=bun-callee bun --preload dd-trace-bun/init examples/elysia-app.ts
+// An Elysia app traced by dd-trace-bun. Run it with
+//   DD_SERVICE=users-api bun --preload dd-trace-bun/init examples/elysia-app.ts
+// Requests from a traced service continue its trace here, and the fetch and database
+// calls dd-trace instruments inside handlers become child spans.
 import { Elysia } from 'elysia'
+import { datadog } from 'dd-trace-bun/elysia'
 
-new Elysia()
-  .get('/hello', async () => {
-    await Bun.sleep(5)
-    const r = await fetch('http://127.0.0.1:4200/echo')
-    return { downstreamSawTraceId: (await r.json())['x-datadog-trace-id'] }
-  })
-  .listen(Number(process.argv[2] ?? 3000))
-console.log('elysia up')
+const app = new Elysia()
+  .use(datadog()) // optional: route names for every route, and handler errors on spans
+  .get('/users/:id', ({ params }) => ({ id: params.id }))
+  .listen(3000)
+
+console.log(`listening on ${app.server!.url}`)
