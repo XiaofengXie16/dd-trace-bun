@@ -84,6 +84,14 @@ Elysia's spans carry its matched route (`GET /*`), just as dd-trace's Express in
 
 Not ported yet: dd-trace's AppSec/IAST request blocking (it writes to a Node `ServerResponse`), HTTP/2, and the http *client* spec. Bun's `fetch` goes through dd-trace's own fetch plugin unchanged.
 
+## How it works
+
+- Patches `Bun.serve` (and `server.reload`) to wrap `fetch` and every function in `routes`.
+- Each request is published on dd-trace's `apm:http:server:request:*` diagnostics channels with a Node-style view of the request and response. dd-trace's own http server plugin then extracts the incoming context, creates the span, applies all its configuration and finishes the span when the `Response` is returned. The span stays active across `await`s in the handler.
+- Bun's native `routes` set `http.route`, so the resource becomes `GET /users/:id`.
+- Defaults `runtimeMetrics` and `profiling` to off under Bun, because their native addons crash or misbehave there. They can still be turned on with `DD_RUNTIME_METRICS_ENABLED` / `DD_PROFILING_ENABLED`.
+- Relies on dd-trace internals: those channel names and `plugins/util/web`. CI runs the full suite against both the pinned dd-trace version and `latest`, so a breaking dd-trace release shows up as a red build.
+
 ## Known limitations
 
 - The server span ends when the handler returns its `Response`, not when a streamed body finishes.
